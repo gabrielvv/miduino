@@ -20,6 +20,7 @@ using namespace ace_button;
 #define PIN_BUTTON_ONE 2
 #define PIN_BUTTON_TWO 3
 #define PIN_BUTTON_THREE 4
+#define PIN_INFRA 5
 
 AceButton button1;
 AceButton button2;
@@ -44,10 +45,10 @@ const int POT_ONE = A0;
 const int POT_TWO = A1;
 
 struct track {
-  int stepStates[NUMPIXELS] = {0,0,0,0,0,0,0,0};
+  int stepStates[NUMPIXELS] = {1,0,1,0,1,0,1,0};
   int stepPlaying[NUMPIXELS] = {0,0,0,0,0,0,0,0};
-  int stepNotes[NUMPIXELS] = {1,5,2,5,1,5,2,5};
-}track1,track2,track3, track4, track5, track6, track7, track8;
+  int stepNotes[NUMPIXELS] = {1,5,1,5,1,5,1,5};
+} track1, track2, track3, track4, track5, track6, track7, track8;
 
 struct track trackList[8]= {track1,track2,track3, track4, track5, track6, track7, track8};
 
@@ -56,17 +57,18 @@ int prevTrackPos = 0;
 int currentPos = 0;
 int prevStep = 0;
 int tempo=0;
+int infraState = LOW;
 
 int noteSelectorCurrent = 0;
 int prevNote = 0;
 
 const byte notePitches[8] = {
-  pitchB1, 
-  pitchC2, 
-  pitchD2, 
-  pitchE2, 
+  pitchB1,
+  pitchC2,
+  pitchD2,
+  pitchE2,
   pitchF2,
-  pitchG2b, 
+  pitchG2b,
   pitchA2b, 
   pitchB2b,
  };
@@ -110,6 +112,7 @@ void setup() {
   pinMode(PIN_BUTTON_ONE, INPUT_PULLUP);
   pinMode(PIN_BUTTON_TWO, INPUT_PULLUP);
   pinMode(PIN_BUTTON_THREE, INPUT_PULLUP);
+  pinMode(PIN_INFRA, INPUT); 
 
   // button set eventHandler;
   button1Config.setEventHandler(handleEventButton);
@@ -289,7 +292,7 @@ int getTempo(){
 }
 
 int getDelay(int tempo){
-  return 60000 / tempo / 4;
+  return 60000 / tempo;
 }
 
 void selectNote(int step, int note){
@@ -309,6 +312,16 @@ void selecTrack(int trackStep){
 }
 
 unsigned long previousMillis = 0;
+
+/*************************************
+########  ##          ###    ##    ## 
+##     ## ##         ## ##    ##  ##  
+##     ## ##        ##   ##    ####   
+########  ##       ##     ##    ##    
+##        ##       #########    ##    
+##        ##       ##     ##    ##    
+##        ######## ##     ##    ##   
+*****************************************/
 
 void play(){
 
@@ -340,10 +353,8 @@ void play(){
     }
  }
   
- 
   allumerActiveSteps();
   pixels.show(); // This sends the updated pixel color to the hardware.
-
     currentPos++;
     if(currentPos == NUMPIXELS) currentPos = 0;
    }
@@ -391,5 +402,16 @@ void loop() {
       allumerActiveSteps();
     }
  }
+
+  if(digitalRead(PIN_INFRA) == HIGH && infraState != HIGH){
+    controlChange(1,1,127);
+    infraState = HIGH;
+    MidiUSB.flush();
+  }
+  if(digitalRead(PIN_INFRA) == LOW && infraState != LOW){
+    controlChange(1,1,0);
+    infraState = LOW;
+    MidiUSB.flush();
+  }
   
 }
