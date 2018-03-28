@@ -1,3 +1,8 @@
+#include <AceButton.h>
+using namespace ace_button;
+#include <AdjustableButtonConfig.h>
+#include <ButtonConfig.h>
+
 #include <frequencyToNote.h>
 #include <MIDIUSB.h>
 #include <pitchToFrequency.h>
@@ -10,22 +15,44 @@
 
 // Which pin on the Arduino is connected to the NeoPixels?
 // On a Trinket or Gemma we suggest changing this to 1
-#define PIN_LED_ONE    11
+#define PIN_LED_ONE    12
 #define PIN_LED_TWO    13
 #define PIN_BUTTON_ONE 2
 #define PIN_BUTTON_TWO 3
 #define PIN_BUTTON_THREE 4
 
+AceButton button1;
+AceButton button2;
+AceButton button3;
+
+ButtonConfig button1Config;
+ButtonConfig button2Config;
+ButtonConfig button3Config;
+
 #define EDIT_MODE     123
 #define PLAY_MODE     124
+
+#define CHANGE_TRACK 125
+#define EDIT_TRACK   126
 
 // How many NeoPixels are attached to the Arduino?
 #define NUMPIXELS      8
 #define LED_STRIPES    2
 
+// Analog
 const int POT_ONE = A0;
 const int POT_TWO = A1;
 
+struct track {
+  int stepStates[NUMPIXELS] = {0,0,0,0,0,0,0,0};
+  int stepPlaying[NUMPIXELS] = {0,0,0,0,0,0,0,0};
+  int stepNotes[NUMPIXELS] = {1,5,2,5,1,5,2,5};
+}track1,track2,track3, track4, track5, track6, track7, track8;
+
+struct track trackList[8]= {track1,track2,track3, track4, track5, track6, track7, track8};
+
+int currentTrackPos = 0;
+int prevTrackPos = 0;
 int currentPos = 0;
 int prevStep = 0;
 int tempo=0;
@@ -33,9 +60,6 @@ int tempo=0;
 int noteSelectorCurrent = 0;
 int prevNote = 0;
 
-int stepStates[NUMPIXELS] = {1,1,1,1,1,1,1,1};
-int stepPlaying[NUMPIXELS] = {0,0,0,0,0,0,0,0};
-int stepNotes[NUMPIXELS] = {1,5,2,5,1,5,2,5};
 const byte notePitches[8] = {
   pitchB1, 
   pitchC2, 
@@ -61,36 +85,116 @@ const uint32_t YELLOW = pixels.Color(10,10,0);
 const uint32_t NO_LIGHT = pixels.Color(0,0,0);
 
 uint32_t pitchColors[NUMPIXELS] = {
-  /*violet */pixels.Color(102*0.2,0,153*0.2),
-  /* rose */pixels.Color(255*0.2,0,127*0.2),
-  /* vert*/ pixels.Color(0,255*0.2,127*0.2),
-  /* rouge */ pixels.Color(255*0.2,9*0.2,33*0.2),
-  /* marron */ pixels.Color(132*0.2,46*0.2,27*0.2),
-  /* orange */ pixels.Color(255*0.2,127*0.2,0*0.2),
-  /* bleu */ pixels.Color(44*0.2,117*0.2,255*0.2),
-  /* yellow */pixels.Color(255*0.2,255*0.2,0)
+  /*violet */pixels.Color(102*0.1,0,153*0.1),
+  /* rose */pixels.Color(255*0.1,0,127*0.1),
+  /* vert*/ pixels.Color(0,255*0.1,127*0.1),
+  /* rouge */ pixels.Color(255*0.1,9*0.1,33*0.1),
+  /* marron */ pixels.Color(132*0.1,46*0.1,27*0.1),
+  /* orange */ pixels.Color(255*0.1,127*0.1,0*0.1),
+  /* bleu */ pixels.Color(44*0.1,117*0.1,255*0.1),
+  /* yellow */pixels.Color(255*0.1,255*0.1,0)
 };
 
-int button_one_state = 0;         // variable for reading the pushbutton status
-int button_two_state = 0;         // variable for reading the pushbutton status
+int global_mode = EDIT_MODE; 
+int track_mode = EDIT_TRACK;
+
 int delayval = 500; // delay for half a second
 
 void setup() {
+  
+  //clean all led
   cleanLeds(PIN_LED_ONE);
   cleanLeds(PIN_LED_TWO);
 
   // initialize the pushbutton pin as an input:
   pinMode(PIN_BUTTON_ONE, INPUT_PULLUP);
   pinMode(PIN_BUTTON_TWO, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_THREE, INPUT_PULLUP);
+
+  // button set eventHandler;
+  button1Config.setEventHandler(handleEventButton);
+  button1.setButtonConfig(&button1Config);
+  button1.init(PIN_BUTTON_ONE);
+
+  button2Config.setEventHandler(handleEventButton);
+  button2.setButtonConfig(&button2Config);
+  button2.init(PIN_BUTTON_TWO);
+  
+  button3Config.setEventHandler(handleEventButton);
+  button3.setButtonConfig(&button3Config);
+  button3.init(PIN_BUTTON_THREE);
+    
+  pixels.begin(); // This initializes the NeoPixel library.
 
   // This is for Trinket 5V 16MHz, you can remove these three lines if you are not using a Trinket
-#if defined (_AVR_ATtiny85_)
-  if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
-#endif
-  // End of trinket special code
-
-  pixels.begin(); // This initializes the NeoPixel library.
+  #if defined (_AVR_ATtiny85_)
+    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
+  #endif
 }
+
+void handleEventButton(AceButton* button, uint8_t eventType, uint8_t buttonState) {
+    Serial.println(button->getPin());
+   if(button->getPin() == PIN_BUTTON_ONE){
+      handleEventButton1(button, eventType, buttonState);
+   }else if(button->getPin() == PIN_BUTTON_TWO){
+      handleEventButton2(button, eventType, buttonState);
+   }
+   else if(button->getPin() == PIN_BUTTON_THREE){
+      handleEventButton3(button, eventType, buttonState);
+   }
+}
+
+
+// Change state for button 1
+void handleEventButton1(AceButton* button, uint8_t eventType, uint8_t buttonState) {
+  Serial.println("PRESSE BUTTON1");
+  switch(eventType) {
+    Serial.println("play");
+    case AceButton::kEventReleased:
+      if(global_mode == EDIT_MODE){
+          cleanLeds(PIN_LED_ONE);
+          Serial.println("EDIT_MODE => PLAY_MODE");
+          global_mode = PLAY_MODE;
+          track_mode = EDIT_TRACK;
+      }
+      else if(global_mode == PLAY_MODE){
+          Serial.println("PLAY_MODE => EDIT_MODE");
+          global_mode = EDIT_MODE;
+      }
+      break;
+  }
+}
+
+// CHange state for button 2
+void handleEventButton2(AceButton* button, uint8_t eventType, uint8_t buttonState) {
+    switch(eventType) {
+       case AceButton::kEventReleased:
+         Serial.println("button 2 pressed");
+         trackList[currentTrackPos].stepStates[currentPos] = trackList[currentTrackPos].stepStates[currentPos] == 0 ? 1 : 0;
+         break;   
+    }
+}
+
+ 
+
+// Change state for button 3 
+void handleEventButton3(AceButton* button, uint8_t eventType, uint8_t buttonState) {
+  switch(eventType) {
+    case AceButton::kEventReleased:
+       Serial.println("PRESS BUTTON 3");
+      if(track_mode == CHANGE_TRACK){
+        Serial.println("CHANGE_TRACK => EDIT_TRACK");
+        track_mode = EDIT_TRACK;
+      }
+      else if(track_mode == EDIT_TRACK){
+         Serial.println("EDIT_TRACK => CHANGE_TRACK");
+         track_mode = CHANGE_TRACK ; 
+      }
+      break;
+  }
+}
+
+
 
 void noteOn(byte channel, byte pitch, byte velocity) {
   midiEventPacket_t noteOn = {0x09, 0x90 | channel, pitch, velocity};
@@ -107,9 +211,6 @@ void controlChange(byte channel, byte control, byte value) {
   MidiUSB.sendMIDI(event);
 }
 
-int global_mode = EDIT_MODE;
-int button_one_debounce_state = LOW;
-int button_two_debounce_state = LOW;
 
 /*************************************************************
    ###    ##       ##       ##     ## ##     ## ######## ########  
@@ -123,13 +224,13 @@ int button_two_debounce_state = LOW;
 
 void allumerActiveSteps(){
   for(int h=0; h < NUMPIXELS; h++){
-    if(stepStates[h] == 1 && h != currentPos){
-      pixels.setPixelColor(h, pitchColors[stepNotes[h]]);
-    }else if(stepStates[h] == 1 && h == currentPos){
+    if(trackList[currentTrackPos].stepStates[h] == 1 && h != currentPos){
+      pixels.setPixelColor(h, pitchColors[trackList[currentTrackPos].stepNotes[h]]);
+    }else if(trackList[currentTrackPos].stepStates[h] == 1 && h == currentPos){
       if(global_mode == PLAY_MODE){
         pixels.setPixelColor(h, GREEN);
       }else{
-        pixels.setPixelColor(h, pitchColors[stepNotes[h]]);
+        pixels.setPixelColor(h, pitchColors[trackList[currentTrackPos].stepNotes[h]]);
       }
     }
     else if(h != currentPos){
@@ -139,6 +240,10 @@ void allumerActiveSteps(){
     }
   }
   pixels.show();
+
+
+  pixels2.setPixelColor(currentTrackPos, GREEN);
+  pixels2.show();
 }
 
 /*************************************************************
@@ -171,46 +276,12 @@ int getStep(){
   return (float)val/(float)1022 * 8;
 }
 
+
 int getNote(){
   int val = analogRead(POT_TWO);
   return (float)val/(float)1022 * 8;
 }
 
-int readButtonState(int buttonId){
-  if(buttonId == PIN_BUTTON_ONE){
-    button_one_state = digitalRead(PIN_BUTTON_ONE);
-    if(button_one_state == HIGH && button_one_debounce_state == LOW){
-      button_one_debounce_state = HIGH;
-    }
-    if(button_one_state == LOW && button_one_debounce_state == HIGH){
-      Serial.println("button 1 pressed");
-      button_one_debounce_state = LOW;
-      switch(global_mode){
-        case EDIT_MODE:
-          cleanLeds(PIN_LED_ONE);
-          Serial.println("EDIT_MODE => PLAY_MODE");
-          return global_mode = PLAY_MODE;
-          break;
-        case PLAY_MODE:
-          Serial.println("PLAY_MODE => EDIT_MODE");
-          return global_mode = EDIT_MODE;
-          break;
-      }
-    }
-  }
-
-  if(buttonId == PIN_BUTTON_TWO){
-    button_two_state = digitalRead(PIN_BUTTON_TWO);
-    if(button_two_state == HIGH && button_two_debounce_state == LOW){
-      button_two_debounce_state = HIGH;
-    }
-    if(button_two_state == LOW && button_two_debounce_state == HIGH){
-      Serial.println("button 2 pressed");
-      button_two_debounce_state = LOW;
-      return stepStates[currentPos] = stepStates[currentPos] == 0 ? 1 : 0;
-    }
-  }
-}
 
 int getTempo(){
   int val = analogRead(A0);
@@ -222,13 +293,19 @@ int getDelay(int tempo){
 }
 
 void selectNote(int step, int note){
-  stepNotes[step] = note;
+  trackList[currentTrackPos].stepNotes[step] = note;
 }
 
 void selectStep(int step){
   cleanLeds(PIN_LED_ONE);
   pixels.setPixelColor(step, GREEN);
   pixels.show(); 
+}
+
+void selecTrack(int trackStep){
+  cleanLeds(PIN_LED_TWO);
+  pixels2.setPixelColor(trackStep, GREEN);
+  pixels2.show();
 }
 
 unsigned long previousMillis = 0;
@@ -251,15 +328,19 @@ void play(){
   }
 
   delayval = getDelay(tempo);
+
+  for(int i = 0; i<8; i++){
+    if(trackList[i].stepStates[currentPos] == 1){
+      noteOn(i, notePitches[trackList[i].stepNotes[currentPos]], intensity);
+      trackList[i].stepPlaying[currentPos] = 1;
+      MidiUSB.flush();
+    }else{
+      noteOff(0, notePitches[trackList[i].stepNotes[currentPos]], 0);
+      MidiUSB.flush();
+    }
+ }
   
-  if(stepStates[currentPos] == 1){
-    noteOn(0, notePitches[stepNotes[currentPos]], intensity);
-    stepPlaying[currentPos] = 1;
-    MidiUSB.flush();
-  }else{
-    noteOff(0, notePitches[stepNotes[currentPos]], 0);
-    MidiUSB.flush();
-  }
+ 
   allumerActiveSteps();
   pixels.show(); // This sends the updated pixel color to the hardware.
 
@@ -280,18 +361,14 @@ void play(){
 
 void loop() {
 
-  /*for(int i = 0; i < NUMPIXELS; i++){
-    pixels.setPixelColor(i, pitchColors[i]);
-  }
-  pixels.show();
-  return*/
-
-  readButtonState(PIN_BUTTON_ONE);
+  button1.check();
+  button3.check();
+  //Serial.println(global_mode);
   if(global_mode == PLAY_MODE){
     play();
   }
-  if(global_mode == EDIT_MODE){
-
+  if(global_mode == EDIT_MODE && track_mode == EDIT_TRACK){
+    button2.check();
     currentPos = getStep();
     if(prevStep != currentPos){
       selectStep(currentPos);
@@ -303,8 +380,16 @@ void loop() {
       selectNote(currentPos, noteSelectorCurrent);
       prevNote = noteSelectorCurrent;
     }
-    
-    readButtonState(PIN_BUTTON_TWO);
     allumerActiveSteps();
   }
+
+  if(track_mode == CHANGE_TRACK && global_mode == EDIT_MODE){
+    currentTrackPos = getNote();
+    if(prevTrackPos != currentTrackPos){
+      selecTrack(currentTrackPos);
+      prevTrackPos = currentTrackPos;
+      allumerActiveSteps();
+    }
+ }
+  
 }
