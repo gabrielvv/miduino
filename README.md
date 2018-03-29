@@ -17,7 +17,7 @@
 
 * Midi Clock
 * Swing potentiometre
-* 2eme barre de leds
-* tempo
+* 2eme barre de leds => OK
+* tempo => OK
 * Processing
 * Track Solo/Mute
