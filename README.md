@@ -12,12 +12,10 @@
 * [Trimpot 10K with Knob](https://www.sparkfun.com/products/9806)
 * [UltraSound Range Finder DPY-ME007](http://forum.arduino.cc/index.php?topic=63302.0)
 * [Capteur Infrarouge réglable MC005](https://www.gotronic.fr/art-capteur-infrarouge-reglable-mc005-12405.htm)
+* Trackpad
+  * https://create.arduino.cc/projecthub/BuildItDR/arduino-controlled-usb-trackpad-f443a6
+  * https://playground.arduino.cc/ComponentLib/Ps2mouse
 
 ### TODO
 
 * Midi Clock
-* Swing potentiometre
-* 2eme barre de leds => OK
-* tempo => OK
-* Processing
-* Track Solo/Mute

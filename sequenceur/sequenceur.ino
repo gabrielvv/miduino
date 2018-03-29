@@ -1,5 +1,8 @@
 #include <Adafruit_NeoPixel.h>
 
+#include <Mouse.h>
+#include <ps2.h>
+
 #include <AceButton.h>
 using namespace ace_button;
 #include <AdjustableButtonConfig.h>
@@ -26,7 +29,7 @@ int currentPos = 0;
 int prevStep = 0;
 int tempo=0;
 
-int noteSelectorCurrent = 0;
+int selectedNoteIndex = 0;
 int prevNote = 0;
 
 int mode = EDIT_MODE;
@@ -78,26 +81,6 @@ const uint32_t GREEN = pixelsStep.Color(0,10,0);
 const uint32_t YELLOW = pixelsStep.Color(10,10,0);
 const uint32_t NO_LIGHT = pixelsStep.Color(0,0,0);
 
-/**
- * violet
- * pixelsStep.Color(102*0.1,0,153*0.1)
- */
-const uint32_t pitchColors[NOTE_NUMBER] = {
-  NO_LIGHT,
-  RED,
-  YELLOW,
-  /* rose */pixelsStep.Color(255*0.1,0,127*0.1),
-  /* vert*/ pixelsStep.Color(0,255*0.1,127*0.1),
-  /* rouge */ pixelsStep.Color(255*0.1,9*0.1,33*0.1),
-  /* marron */ pixelsStep.Color(132*0.1,46*0.1,27*0.1),
-  /* orange */ pixelsStep.Color(255*0.1,127*0.1,0*0.1),
-  /* bleu */ pixelsStep.Color(44*0.1,117*0.1,255*0.1),
-  /* yellow */pixelsStep.Color(255*0.1,255*0.1,0),
-  /* violet */pixelsStep.Color(102*0.1,0,153*0.1),
-  pixelsStep(0,0,100),
-  pixelsStep(0,100,100),
-};
-
 /*****************************************************************************
                   ##     ## #### ########  #### 
                   ###   ###  ##  ##     ##  ##  
@@ -107,24 +90,64 @@ const uint32_t pitchColors[NOTE_NUMBER] = {
                   ##     ##  ##  ##     ##  ##  
                   ##     ## #### ########  #### 
  ****************************************************************************/
+const uint8_t MIDI_MAX_VALUE = 127;
 
+/**
+ * 
+ */
 void noteOn(byte channel, byte pitch, byte velocity) {
   midiEventPacket_t noteOn = {0x09, 0x90 | channel, pitch, velocity};
   MidiUSB.sendMIDI(noteOn);
 }
 
+/**
+ * 
+ */
 void noteOff(byte channel, byte pitch, byte velocity) {
   midiEventPacket_t noteOff = {0x08, 0x80 | channel, pitch, velocity};
   MidiUSB.sendMIDI(noteOff);
 }
 
+/**
+ * 
+ */
 void controlChange(byte channel, byte control, byte value) {
   midiEventPacket_t event = {0x0B, 0xB0 | channel, control, value};
   MidiUSB.sendMIDI(event);
 }
 
+/**
+ * Attention x et y sont des valeurs relative
+ * => représente la direction du mouvement sur le trackpad
+ */
+void xyControlChange(int x, int y){
+  static int _x = 0;
+  static int _y = 0;
+  const static int INCR = 2;
+  static int xControlValue = MIDI_MAX_VALUE;
+  static int yControlValue = MIDI_MAX_VALUE;
+  
+  if(_x != x){
+    //Serial.println("xControlChange");
+    _x = x;
+    // Les valeurs MIDI doivent appartenir à l'intervall 0-127
+    // @see https://www.midi.org/specifications/item/table-3-control-change-messages-data-bytes-2
+    xControlValue = constrain(_x > 0 ? xControlValue+INCR : xControlValue-INCR, 0, MIDI_MAX_VALUE);
+    controlChange(0, 2, xControlValue);
+  }
+
+  if(_y != y){
+    //Serial.println("yControlChange");
+    _y = y;
+    // Les valeurs MIDI doivent appartenir à l'intervall 0-127
+    // @see https://www.midi.org/specifications/item/table-3-control-change-messages-data-bytes-2
+    yControlValue = constrain(_y > 0 ? yControlValue+INCR : yControlValue-INCR, 0, MIDI_MAX_VALUE);
+    controlChange(0, 1, yControlValue);
+  }
+}
+
 const byte NOTE_OFF = -1;
-const byte notePitches[8] = {
+const byte notePitches[NOTE_NUMBER] = {
   NOTE_OFF,
   pitchC2,
   pitchD2b,
@@ -140,50 +163,63 @@ const byte notePitches[8] = {
   pitchB2,
 };
 
-const uint8_t MIDI_MAX_VALUE = 127;
-
-struct track {
-  int stepNotes[STEP_NUMBER];
-};
-
-/* Croche */
-/*track trackList[] = {
-    { .stepNotes = {pitchC2, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2, NOTE_OFF}},
-    { .stepNotes = {NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF}},
-    { .stepNotes = {pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2}},
-    { .stepNotes = {pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2, pitchC2}},
-    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
-    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
-    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
-    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
-  };*/
-
-/* Double Croche */
-track trackList[] = {
-    { .stepNotes = {pitchC2, NOTE_OFF, NOTE_OFF, pitchC2, NOTE_OFF, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2}},
-    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
-    { .stepNotes = {pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchG2b, NOTE_OFF, pitchF2, NOTE_OFF, pitchF2, pitchF2}},
-    { .stepNotes = {pitchD2, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchE2, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
-    { .stepNotes = {pitchC2, pitchD2b, pitchD2, pitchE2b, pitchE2, pitchF2, pitchG2b, pitchG2, pitchA2b, pitchA2, pitchB2b, pitchB2, pitchC2, pitchD2b, pitchD2}},
-    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
-    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
-    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
-  };
-
+/**
+ * @param {byte} note - la hauteur de la note
+ * @return {uint32_t} color - la couleur correspondante grâce au tableau "pitchColors"
+ */
 uint32_t getColorForNote(byte note){
+  
+  static const uint32_t pitchColors[NOTE_NUMBER] = {
+    NO_LIGHT,
+    RED,
+    YELLOW,
+    /* rose */pixelsStep.Color(255*0.1,0,127*0.1),
+    /* vert*/ pixelsStep.Color(0,255*0.1,127*0.1),
+    /* rouge */ pixelsStep.Color(255*0.1,9*0.1,33*0.1),
+    /* marron */ pixelsStep.Color(132*0.1,46*0.1,27*0.1),
+    /* orange */ pixelsStep.Color(255*0.1,127*0.1,0*0.1),
+    /* bleu */ pixelsStep.Color(44*0.1,117*0.1,255*0.1),
+    /* yellow */pixelsStep.Color(255*0.1,255*0.1,0),
+    /* violet */pixelsStep.Color(102*0.1,0,153*0.1),
+    pixelsStep.Color(0,0,100),
+    pixelsStep.Color(0,100,100),
+  };
+  
   for(int i = 0; i < NOTE_NUMBER; i++){
     if(notePitches[i] == note){
       return pitchColors[i];
     }
   }
+
+  return NO_LIGHT;
 }
+
+struct track {
+  int stepNotes[STEP_NUMBER];
+  int mute;
+  int solo;
+};
+
+/* Double Croche */
+track trackList[] = {
+  { .stepNotes = {pitchC2, NOTE_OFF, NOTE_OFF, pitchC2, NOTE_OFF, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchC2, NOTE_OFF, pitchC2}, .mute = 0, .solo = 0},
+  { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF}, .mute = 0, .solo = 0},
+  { .stepNotes = {pitchF2, pitchF2, pitchG2b, pitchF2, pitchF2, pitchF2, pitchG2b, pitchF2, pitchF2, pitchF2, pitchG2b, NOTE_OFF, pitchF2, NOTE_OFF, pitchF2, pitchF2}, .mute = 0, .solo = 0},
+  { .stepNotes = {pitchD2, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchE2, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}, .mute = 0, .solo = 0},
+  { .stepNotes = {pitchC2, pitchD2b, pitchD2, pitchE2b, pitchE2, pitchF2, pitchG2b, pitchG2, pitchA2b, pitchA2, pitchB2b, pitchB2, pitchC2, pitchD2b, pitchD2}, .mute = 0, .solo = 0},
+  { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}, .mute = 0, .solo = 0},
+  { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}, .mute = 0, .solo = 0},
+  { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}, .mute = 0, .solo = 0},
+};
 
 void noteOffAll(){
   for(int i = 0; i < TRACK_NUMBER; i++){
     track mTrack = trackList[i];
-    byte note = mTrack.stepNotes[currentPos];
-    if(note != NOTE_OFF){
-      noteOff(i, note, MIDI_MAX_VALUE);
+    for(int j = 0; j < STEP_NUMBER; j++){
+      byte note = mTrack.stepNotes[j];
+      if(note != NOTE_OFF){
+        noteOff(i, note, MIDI_MAX_VALUE);
+      }
     }
   }
   MidiUSB.flush();
@@ -227,6 +263,9 @@ void handleEventButton1(AceButton* button, uint8_t eventType, uint8_t buttonStat
         }
       break;
       case AceButton::kEventClicked:
+        /*int solo = trackList[currentTrackPos].solo = !trackList[currentTrackPos].solo;
+        controlChange(0, 202+currentTrackPos, solo*MIDI_MAX_VALUE);
+        MidiUSB.flush();*/
         if(mode == EDIT_MODE){
           if(track_mode == CHANGE_TRACK){
             Serial.println("CHANGE_TRACK => EDIT_TRACK");
@@ -241,11 +280,18 @@ void handleEventButton1(AceButton* button, uint8_t eventType, uint8_t buttonStat
   }
 }
 
-// CHange state for button 2
+/**
+ * MIDI values < 64 pour OFF, et >= 64 pour ON
+ * 
+ */
 void handleEventButton2(AceButton* button, uint8_t eventType, uint8_t buttonState) {
+    
     switch(eventType) {
-       case AceButton::kEventReleased:
-         break;   
+       case AceButton::kEventClicked:
+        int mute = trackList[currentTrackPos].mute = !trackList[currentTrackPos].mute;
+        controlChange(0, 102+currentTrackPos, !mute*MIDI_MAX_VALUE);
+        MidiUSB.flush();
+       break;
     }
 }
 
@@ -261,6 +307,11 @@ void handleEventButton2(AceButton* button, uint8_t eventType, uint8_t buttonStat
  
  *******************************************************************************/
 
+/**
+ *
+ *
+ * @return {int} distance - distance en cm (oscille typiquement entre 2 et 30), 0 quand champ libre
+ */
 int getDist(){
 
   static int getDist_distance = 0;
@@ -273,27 +324,29 @@ int getDist(){
   
   if(getDist_currentStep == 0){
     //Serial.println("getDist : step1");
-    digitalWrite(6, LOW);
+    digitalWrite(PIN_ULTRASOUND_OUT, LOW);
     getDist_currentStep = 1;
     getDist_previousInfraMillis = millis();
   }
   
   // The DYP-ME007 pings on the low-high flank...
-  if (getDist_currentInfraMillis - getDist_previousInfraMillis >= 2 && getDist_currentStep == 1) {
+  if (getDist_currentInfraMillis - getDist_previousInfraMillis >= 100 && getDist_currentStep == 1) {
     //Serial.println("getDist : step2");
     getDist_currentStep = 2;
-    digitalWrite(6, HIGH);
+    digitalWrite(PIN_ULTRASOUND_OUT, HIGH);
     getDist_previousInfraMillis = millis();
   }
   
-  if (getDist_currentInfraMillis - getDist_previousInfraMillis >= 10 && getDist_currentStep == 2) {
+  if (getDist_currentInfraMillis - getDist_previousInfraMillis >= 200 && getDist_currentStep == 2) {
     //Serial.println("getDist : step3");
     getDist_previousInfraMillis = 1;
     getDist_currentStep = 0;
-    digitalWrite(6, LOW);
+    digitalWrite(PIN_ULTRASOUND_OUT, LOW);
+    
     // the distance is proportional to the time interval
     // between HIGH and LOW
-    getDist_distance = pulseIn(7, HIGH)/58;
+    // @see http://arcbotics.com/products/sparki/parts/ultrasonic-range-finder/
+    getDist_distance = pulseIn(PIN_ULTRASOUND_IN, HIGH) / 58;
     if(getDist_prevDistance != getDist_distance){
       getDist_prevDistance = getDist_distance;
     }
@@ -334,7 +387,7 @@ void allumerActiveSteps(){
           if(blinkState){
             pixelsStep.setPixelColor(h, getColorForNote(note));
           }else{
-            pixelsStep.setPixelColor(h, GREEN);
+            pixelsStep.setPixelColor(h, NO_LIGHT);
           }
           blinkState = !blinkState;
         }
@@ -361,22 +414,12 @@ int getPot2(int valueNumber = 8){
   return (float)val/(float)1022 * valueNumber;
 }
 
-int getPot3(int valueNumber = 4){
-  int val = analogRead(POT_THREE);
-  return (float)val/(float)1022 * valueNumber;
-}
-
 int getTempo(){
-  int val = analogRead(A0);
-  return (((float)val / (float)1022) * (float)120) + 60;
+  return getPot2(120) + 60;
 }
 
 int getDelay(int tempo){
   return 60000 / tempo / 2;
-}
-
-void selectNote(int step, int index){
-  trackList[currentTrackPos].stepNotes[step] = notePitches[index];
 }
 
 void selectStep(int step){
@@ -440,123 +483,3 @@ int play(){
 
    return midiFlush;
 }
-
-/*******************************************************
-  ######  ######## ######## ##     ## ########  
-##    ## ##          ##    ##     ## ##     ## 
-##       ##          ##    ##     ## ##     ## 
- ######  ######      ##    ##     ## ########  
-      ## ##          ##    ##     ## ##        
-##    ## ##          ##    ##     ## ##        
- ######  ########    ##     #######  ##  
- **********************************************************/
-
-
-void setup() {
-  
-  // initialize the pushbutton pin as an input:
-  pinMode(PIN_BUTTON_ONE, INPUT_PULLUP);
-  pinMode(PIN_BUTTON_TWO, INPUT_PULLUP);
-  pinMode(PIN_BUTTON_THREE, INPUT_PULLUP);
-  pinMode(PIN_INFRA, INPUT); 
-  pinMode(PIN_ULTRASOUND_OUT, OUTPUT);
-  pinMode(PIN_ULTRASOUND_IN, INPUT);
-
-  // button set eventHandler;
-  buttonConfig.setFeature(ButtonConfig::kFeatureClick);
-  buttonConfig.setFeature(ButtonConfig::kFeatureDoubleClick);
-  buttonConfig.setEventHandler(handleEventButton);
-  button1.setButtonConfig(&buttonConfig);
-  button1.init(PIN_BUTTON_ONE);
-
-  button2.setButtonConfig(&buttonConfig);
-  button2.init(PIN_BUTTON_TWO);
-    
-  pixelsStep.begin(); // This initializes the NeoPixel library.
-  pixelsTrack.begin();
-  
-  //clean all led
-  pixelsStep.clear(); pixelsStep.show();
-  pixelsTrack.clear(); pixelsTrack.show();
-
-  // This is for Trinket 5V 16MHz, you can remove these three lines if you are not using a Trinket
-  #if defined (_AVR_ATtiny85_)
-    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
-  #endif
-}
-
-/********************************************
-##        #######   #######  ########  
-##       ##     ## ##     ## ##     ## 
-##       ##     ## ##     ## ##     ## 
-##       ##     ## ##     ## ########  
-##       ##     ## ##     ## ##        
-##       ##     ## ##     ## ##        
-########  #######   #######  ##  
-*********************************************/
-
-
-void loop() {
-  static int infraState = LOW;
-  static int prevDist = 0;
-  static int dist = 0;
-  static int flushMidi = 0;
-
-  flushMidi = 0;
-  button1.check();
-  if(mode == PLAY_MODE){
-    if(play()) flushMidi = 1;
-    currentTrackPos = getPot2();
-    if(prevTrackPos != currentTrackPos){
-      selecTrack(currentTrackPos);
-      prevTrackPos = currentTrackPos;
-    }
-  }
-  if(mode == EDIT_MODE && track_mode == EDIT_TRACK){
-    button2.check();
-    currentPos = getPot1(STEP_NUMBER);
-    if(prevStep != currentPos){
-      selectStep(currentPos);
-      prevStep = currentPos;
-    }
-
-    noteSelectorCurrent = getPot2();
-    if(prevNote != noteSelectorCurrent){
-      selectNote(currentPos, noteSelectorCurrent);
-      prevNote = noteSelectorCurrent;
-    }
-    allumerActiveSteps();
-  }
-
-  if(track_mode == CHANGE_TRACK && mode == EDIT_MODE){
-    currentTrackPos = getPot2();
-    if(prevTrackPos != currentTrackPos){
-      selecTrack(currentTrackPos);
-      prevTrackPos = currentTrackPos;
-      allumerActiveSteps();
-    }
- }
-  
-  if(digitalRead(PIN_INFRA) == HIGH && infraState != HIGH){
-    controlChange(1,1,MIDI_MAX_VALUE);
-    infraState = HIGH;
-    flushMidi = 1;
-  }else if(digitalRead(PIN_INFRA) == LOW && infraState != LOW){
-    controlChange(1,1,0);
-    infraState = LOW;
-    flushMidi = 1;
-  }
-  
-  /*dist = getDist();
-  if(abs(dist - prevDist) > 1 && dist < 20){
-    //Serial.println("New distance :" + String(dist, DEC));
-    prevDist = dist;
-    controlChange(1,2,map(dist, 2, 13, 0, MIDI_MAX_VALUE));
-    flushMidi = 1;
-  }*/
-  
-  if(flushMidi){
-    MidiUSB.flush();
-  }
-}
-
