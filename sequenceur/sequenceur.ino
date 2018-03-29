@@ -1,3 +1,5 @@
+#include "Track.h"
+
 #define EDIT_MODE 123
 #define EDIT_TRACK 125
 #define CHANGE_TRACK 126
@@ -5,14 +7,6 @@
 
 #define NUMPIXELS      8
 #define LED_STRIPES    2
-
-struct track {
-  int stepStates[NUMPIXELS] = {1,0,1,0,1,0,1,0};
-  int stepPlaying[NUMPIXELS] = {0,0,0,0,0,0,0,0};
-  int stepNotes[NUMPIXELS] = {1,5,1,5,1,5,1,5};
-} track1, track2, track3, track4, track5, track6, track7, track8;
-
-struct track trackList[8]= {track1,track2,track3, track4, track5, track6, track7, track8};
 
 int currentTrackPos = 0;
 int prevTrackPos = 0;
@@ -114,8 +108,8 @@ void handleEventButton1(AceButton* button, uint8_t eventType, uint8_t buttonStat
 void handleEventButton2(AceButton* button, uint8_t eventType, uint8_t buttonState) {
     switch(eventType) {
        case AceButton::kEventReleased:
-         struct track *currentTrack = &(trackList[currentTrackPos]);
-         currentTrack->stepStates[currentPos] = currentTrack->stepStates[currentPos] == 0 ? 1 : 0;
+         /*struct track *currentTrack = &(trackList[currentTrackPos]);
+         currentTrack->stepStates[currentPos] = currentTrack->stepStates[currentPos] == 0 ? 1 : 0;*/
          break;   
     }
 }
@@ -150,18 +144,34 @@ void controlChange(byte channel, byte control, byte value) {
   MidiUSB.sendMIDI(event);
 }
 
+const byte NOTE_OFF = -1;
 const byte notePitches[8] = {
+  NOTE_OFF,
   pitchB1,
   pitchC2,
   pitchD2,
   pitchE2,
   pitchF2,
   pitchG2b,
-  pitchA2b, 
-  pitchB2b,
+  pitchA2b,
 };
 
 const uint8_t MIDI_MAX_VALUE = 127;
+
+struct track {
+  int stepNotes[8];
+};
+
+track trackList[] = {
+    { .stepNotes = {pitchB1, NOTE_OFF, pitchB1, NOTE_OFF, pitchB1, NOTE_OFF, pitchB1, NOTE_OFF}},
+    { .stepNotes = {NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF, NOTE_OFF, NOTE_OFF, pitchD2, NOTE_OFF}},
+    { .stepNotes = {pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2, pitchF2}},
+    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
+    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
+    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
+    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
+    { .stepNotes = {NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF, NOTE_OFF}},
+  };
 
 /*********************************************************************************************
  
@@ -188,8 +198,12 @@ const uint32_t GREEN = pixels.Color(0,10,0);
 const uint32_t YELLOW = pixels.Color(10,10,0);
 const uint32_t NO_LIGHT = pixels.Color(0,0,0);
 
+/**
+ * violet
+ * pixels.Color(102*0.1,0,153*0.1)
+ */
 const uint32_t pitchColors[NUMPIXELS] = {
-  /*violet */pixels.Color(102*0.1,0,153*0.1),
+  pixels.Color(0,0,0),
   /* rose */pixels.Color(255*0.1,0,127*0.1),
   /* vert*/ pixels.Color(0,255*0.1,127*0.1),
   /* rouge */ pixels.Color(255*0.1,9*0.1,33*0.1),
@@ -199,46 +213,12 @@ const uint32_t pitchColors[NUMPIXELS] = {
   /* yellow */pixels.Color(255*0.1,255*0.1,0)
 };
 
-/*******************************************************
-  ######  ######## ######## ##     ## ########  
-##    ## ##          ##    ##     ## ##     ## 
-##       ##          ##    ##     ## ##     ## 
- ######  ######      ##    ##     ## ########  
-      ## ##          ##    ##     ## ##        
-##    ## ##          ##    ##     ## ##        
- ######  ########    ##     #######  ##  
- **********************************************************/
-
-void setup() {
-  
-  //clean all led
-  cleanLeds(PIN_LED_ONE);
-  cleanLeds(PIN_LED_TWO);
-
-  // initialize the pushbutton pin as an input:
-  pinMode(PIN_BUTTON_ONE, INPUT_PULLUP);
-  pinMode(PIN_BUTTON_TWO, INPUT_PULLUP);
-  pinMode(PIN_BUTTON_THREE, INPUT_PULLUP);
-  pinMode(PIN_INFRA, INPUT); 
-  pinMode(PIN_ULTRASOUND_OUT, OUTPUT);
-  pinMode(PIN_ULTRASOUND_IN, INPUT);
-
-  // button set eventHandler;
-  buttonConfig.setFeature(ButtonConfig::kFeatureClick);
-  buttonConfig.setFeature(ButtonConfig::kFeatureDoubleClick);
-  buttonConfig.setEventHandler(handleEventButton);
-  button1.setButtonConfig(&buttonConfig);
-  button1.init(PIN_BUTTON_ONE);
-
-  button2.setButtonConfig(&buttonConfig);
-  button2.init(PIN_BUTTON_TWO);
-    
-  pixels.begin(); // This initializes the NeoPixel library.
-
-  // This is for Trinket 5V 16MHz, you can remove these three lines if you are not using a Trinket
-  #if defined (_AVR_ATtiny85_)
-    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
-  #endif
+uint32_t getColorForNote(byte note){
+  for(int i = 0; i < NUMPIXELS; i++){
+    if(notePitches[i] == note){
+      return pitchColors[i];
+    }
+  }
 }
 
 /****************************************************************************
@@ -314,16 +294,17 @@ void allumerActiveSteps(){
   struct track *currentTrack = &(trackList[currentTrackPos]);
   
   for(int h=0; h < NUMPIXELS; h++){
-    if(currentTrack->stepStates[h] == 1 && h != currentPos){
-      pixels.setPixelColor(h, pitchColors[currentTrack->stepNotes[h]]);
-    }else if(currentTrack->stepStates[h] == 1 && h == currentPos){
+    byte note = currentTrack->stepNotes[h];
+    if(note != NOTE_OFF && h != currentPos){
+      pixels.setPixelColor(h, getColorForNote(note));
+    }else if(note != NOTE_OFF && h == currentPos){
       if(mode == PLAY_MODE){
         pixels.setPixelColor(h, GREEN);
       }else{
         if(currentMillis - prevMillis > 500){
           prevMillis = currentMillis;
           if(blinkState){
-            pixels.setPixelColor(h, pitchColors[currentTrack->stepNotes[h]]);
+            pixels.setPixelColor(h, getColorForNote(note));
           }else{
             pixels.setPixelColor(h, GREEN);
           }
@@ -373,9 +354,9 @@ int getPot1(){
 }
 
 
-int getPot2(){
+int getPot2(int valueNumber = 8){
   int val = analogRead(POT_TWO);
-  return (float)val/(float)1022 * 8;
+  return (float)val/(float)1022 * valueNumber;
 }
 
 
@@ -385,11 +366,11 @@ int getTempo(){
 }
 
 int getDelay(int tempo){
-  return 60000 / tempo;
+  return 60000 / tempo / 2;
 }
 
-void selectNote(int step, int note){
-  trackList[currentTrackPos].stepNotes[step] = note;
+void selectNote(int step, int index){
+  trackList[currentTrackPos].stepNotes[step] = notePitches[index];
 }
 
 void selectStep(int step){
@@ -431,16 +412,18 @@ int play(){
     previousMillis = currentMillis;
     delayVal = getDelay(tempo);
     
-    for(int i = 0; i<8; i++){
-      struct track mTrack = trackList[i];
-      if(mTrack.stepStates[currentPos] == 1){
-        noteOn(i, notePitches[mTrack.stepNotes[currentPos]], MIDI_MAX_VALUE);
-        mTrack.stepPlaying[currentPos] = 1;
-        midiFlush = 1;
-      }else{
-        noteOff(0, notePitches[mTrack.stepNotes[currentPos]], 0);
+    for(int i = 0; i < 8; i++){
+      track mTrack = trackList[i];
+      byte note = mTrack.stepNotes[currentPos];
+      byte prevNote = mTrack.stepNotes[currentPos-1 < 0 ? 7 : currentPos-1];
+      if(note != NOTE_OFF){
+        noteOn(i, note, MIDI_MAX_VALUE);
         midiFlush = 1;
       }
+      /*if(prevNote != NOTE_OFF){
+        noteOff(i, prevNote, 0);
+        midiFlush = 1;
+      }*/
     }
     
     allumerActiveSteps();
@@ -450,6 +433,49 @@ int play(){
    }
 
    return midiFlush;
+}
+
+/*******************************************************
+  ######  ######## ######## ##     ## ########  
+##    ## ##          ##    ##     ## ##     ## 
+##       ##          ##    ##     ## ##     ## 
+ ######  ######      ##    ##     ## ########  
+      ## ##          ##    ##     ## ##        
+##    ## ##          ##    ##     ## ##        
+ ######  ########    ##     #######  ##  
+ **********************************************************/
+
+
+void setup() {
+  
+  //clean all led
+  cleanLeds(PIN_LED_ONE);
+  cleanLeds(PIN_LED_TWO);
+
+  // initialize the pushbutton pin as an input:
+  pinMode(PIN_BUTTON_ONE, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_TWO, INPUT_PULLUP);
+  pinMode(PIN_BUTTON_THREE, INPUT_PULLUP);
+  pinMode(PIN_INFRA, INPUT); 
+  pinMode(PIN_ULTRASOUND_OUT, OUTPUT);
+  pinMode(PIN_ULTRASOUND_IN, INPUT);
+
+  // button set eventHandler;
+  buttonConfig.setFeature(ButtonConfig::kFeatureClick);
+  buttonConfig.setFeature(ButtonConfig::kFeatureDoubleClick);
+  buttonConfig.setEventHandler(handleEventButton);
+  button1.setButtonConfig(&buttonConfig);
+  button1.init(PIN_BUTTON_ONE);
+
+  button2.setButtonConfig(&buttonConfig);
+  button2.init(PIN_BUTTON_TWO);
+    
+  pixels.begin(); // This initializes the NeoPixel library.
+
+  // This is for Trinket 5V 16MHz, you can remove these three lines if you are not using a Trinket
+  #if defined (_AVR_ATtiny85_)
+    if (F_CPU == 16000000) clock_prescale_set(clock_div_1);
+  #endif
 }
 
 /********************************************
@@ -514,13 +540,13 @@ void loop() {
     flushMidi = 1;
   }
   
-  dist = getDist();
+  /*dist = getDist();
   if(abs(dist - prevDist) > 1 && dist < 20){
     //Serial.println("New distance :" + String(dist, DEC));
     prevDist = dist;
     controlChange(1,2,map(dist, 2, 13, 0, MIDI_MAX_VALUE));
     flushMidi = 1;
-  }
+  }*/
   
   if(flushMidi){
     MidiUSB.flush();
