@@ -59,6 +59,8 @@ void setup() {
  */
 void loop() {
   static int midiFlush = 0;
+  static byte prevNote = 0;
+  static byte selectedNoteIndex = 0;
 
   midiFlush = 0;
   
@@ -77,46 +79,42 @@ void loop() {
     }
 
     if(track_mode == EDIT_TRACK){
-      currentStepPos = getPot1(STEP_NUMBER);
-      if(prevStep != currentStepPos){
-        selectStep(currentStepPos);
-        prevStep = currentStepPos;
-      }
-
-      selectedNoteIndex = getPot2(NOTE_NUMBER);
-      if(prevNote != selectedNoteIndex){
-        trackList[currentTrackPos].stepNotes[currentStepPos] = notePitches[selectedNoteIndex];
-        prevNote = selectedNoteIndex;
+      currentEditStepPos = getPot1(STEP_NUMBER);
+      if(prevEditStep != currentEditStepPos){
+        selectStep(currentEditStepPos);
+        prevEditStep = currentEditStepPos;
       }
     }
   }
-  
-  if(mode == EDIT_MODE && track_mode == EDIT_TRACK){
-    currentStepPos = getPot1(STEP_NUMBER);
-    if(prevStep != currentStepPos){
-      selectStep(currentStepPos);
-      prevStep = currentStepPos;
-    }
 
+  if(track_mode == EDIT_TRACK){
     selectedNoteIndex = getPot2(NOTE_NUMBER);
     if(prevNote != selectedNoteIndex){
       byte note = notePitches[selectedNoteIndex];
-      trackList[currentTrackPos].stepNotes[currentStepPos] = note;
+      trackList[currentTrackPos].stepNotes[currentEditStepPos] = note;
       prevNote = selectedNoteIndex;
-      /*noteOn(currentTrackPos, note, MIDI_MAX_VALUE);
-      midiFlush = 1;*/
     }
-    allumerActiveSteps();
+  }
+  
+  if(mode == EDIT_MODE){
+    if(track_mode == EDIT_TRACK){
+      currentEditStepPos = getPot1(STEP_NUMBER);
+      if(prevEditStep != currentEditStepPos){
+        selectStep(currentEditStepPos);
+        prevEditStep = currentEditStepPos;
+      }
+    }
+
+    if(track_mode == CHANGE_TRACK){
+      currentTrackPos = getPot1(TRACK_NUMBER);
+      if(prevTrackPos != currentTrackPos){
+        selecTrack(currentTrackPos);
+        prevTrackPos = currentTrackPos;
+      }
+    }
   }
 
-  if(track_mode == CHANGE_TRACK && mode == EDIT_MODE){
-    currentTrackPos = getPot1(TRACK_NUMBER);
-    if(prevTrackPos != currentTrackPos){
-      selecTrack(currentTrackPos);
-      prevTrackPos = currentTrackPos;
-      allumerActiveSteps();
-    }
- }
+  light();
   
   if(midiFlush){
     MidiUSB.flush();

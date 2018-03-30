@@ -22,6 +22,7 @@ using namespace ace_button;
 
  ******************************************************************************************************************/
 
+#define SMOOTHING_FACTOR 50
 #define BLINK_DELAY 200
 #define EDIT_MODE 123
 #define EDIT_TRACK 125
@@ -34,12 +35,11 @@ const int TRACK_NUMBER = 8;
 
 int currentTrackPos = 0;
 int prevTrackPos = 0;
-int currentStepPos = 0;
-int prevStep = 0;
+int currentEditStepPos = 0;
+int prevEditStep = 0;
+int currentPlayStepPos = 0;
+int prevPlayStep = 0;
 int tempo=0;
-
-int selectedNoteIndex = 0;
-int prevNote = 0;
 
 int mode = EDIT_MODE;
 int track_mode = CHANGE_TRACK;
@@ -67,7 +67,7 @@ int track_mode = CHANGE_TRACK;
 // Analog
 const int POT_ONE = A0;
 const int POT_TWO = A1;
-const int POT_THREE = A3;
+const int POT_THREE = A2;
 
 /*********************************************************************************************
  
@@ -122,36 +122,6 @@ void noteOff(byte channel, byte pitch, byte velocity) {
 void controlChange(byte channel, byte control, byte value) {
   midiEventPacket_t event = {0x0B, 0xB0 | channel, control, value};
   MidiUSB.sendMIDI(event);
-}
-
-/**
- * Attention x et y sont des valeurs relative
- * => représente la direction du mouvement sur le trackpad
- */
-void xyControlChange(int x, int y){
-  static int _x = 0;
-  static int _y = 0;
-  const static int INCR = 2;
-  static int xControlValue = MIDI_MAX_VALUE;
-  static int yControlValue = MIDI_MAX_VALUE;
-  
-  if(_x != x){
-    //Serial.println("xControlChange");
-    _x = x;
-    // Les valeurs MIDI doivent appartenir à l'intervall 0-127
-    // @see https://www.midi.org/specifications/item/table-3-control-change-messages-data-bytes-2
-    xControlValue = constrain(_x > 0 ? xControlValue+INCR : xControlValue-INCR, 0, MIDI_MAX_VALUE);
-    controlChange(0, 2, xControlValue);
-  }
-
-  if(_y != y){
-    //Serial.println("yControlChange");
-    _y = y;
-    // Les valeurs MIDI doivent appartenir à l'intervall 0-127
-    // @see https://www.midi.org/specifications/item/table-3-control-change-messages-data-bytes-2
-    yControlValue = constrain(_y > 0 ? yControlValue+INCR : yControlValue-INCR, 0, MIDI_MAX_VALUE);
-    controlChange(0, 1, yControlValue);
-  }
 }
 
 const byte NOTE_OFF = -1;
@@ -277,10 +247,6 @@ void handleEventButton1(AceButton* button, uint8_t eventType, uint8_t buttonStat
         }
       break;
       case AceButton::kEventClicked:
-        int solo = trackList[currentTrackPos].solo = !trackList[currentTrackPos].solo;
-        controlChange(0, 202+currentTrackPos, solo*MIDI_MAX_VALUE);
-        MidiUSB.flush();
-        
         if(track_mode == CHANGE_TRACK){
           Serial.println("CHANGE_TRACK => EDIT_TRACK");
           track_mode = EDIT_TRACK;
@@ -307,14 +273,14 @@ void handleEventButton2(AceButton* button, uint8_t eventType, uint8_t buttonStat
           int mute = trackList[currentTrackPos].mute = !trackList[currentTrackPos].mute;
           controlChange(0, 102+currentTrackPos, (!mute)*MIDI_MAX_VALUE);
         }else{
-          byte note = trackList[currentTrackPos].stepNotes[currentStepPos];
+          byte note = trackList[currentTrackPos].stepNotes[currentEditStepPos];
           noteOn(currentTrackPos, note, MIDI_MAX_VALUE);
         }
         MidiUSB.flush();
        break;
        case AceButton::kEventReleased:
        if(mode == EDIT_MODE){
-          byte note = trackList[currentTrackPos].stepNotes[currentStepPos];
+          byte note = trackList[currentTrackPos].stepNotes[currentEditStepPos];
           noteOff(currentTrackPos, note, MIDI_MAX_VALUE);
         }
         MidiUSB.flush();
@@ -332,7 +298,7 @@ void handleEventButton2(AceButton* button, uint8_t eventType, uint8_t buttonStat
 ##     ## ######## ########  #######  ##     ## ######## ##     ## 
 *******************************************************************/
 
-void allumerActiveSteps(){
+void light(){
 
   static int currentMillis = 0;
   static int prevMillis = 0;
@@ -342,13 +308,16 @@ void allumerActiveSteps(){
   struct track *currentTrack = &(trackList[currentTrackPos]);
 
   /* STEP LEDS */
-  
-  for(int h=0; h < STEP_NUMBER; h++){
-    byte note = currentTrack->stepNotes[h];
-    if(note != NOTE_OFF && h != currentStepPos){
-      pixelsStep.setPixelColor(h, getColorForNote(note));
-    }else if(note != NOTE_OFF && h == currentStepPos && track_mode == EDIT_TRACK){
-        if(currentMillis - prevMillis > BLINK_DELAY){
+
+  if(mode == EDIT_MODE || (mode == PLAY_MODE && track_mode == EDIT_MODE)){
+    for(int h=0; h < STEP_NUMBER; h++){
+      byte note = currentTrack->stepNotes[h];
+      if(h != currentEditStepPos){
+        pixelsStep.setPixelColor(h, getColorForNote(note));
+      }else if(h == currentEditStepPos){
+        if(note == NOTE_OFF){
+          pixelsStep.setPixelColor(h, GREEN);
+        }else if(currentMillis - prevMillis > BLINK_DELAY){
           prevMillis = currentMillis;
           if(blinkState){
             pixelsStep.setPixelColor(h, getColorForNote(note));
@@ -357,11 +326,18 @@ void allumerActiveSteps(){
           }
           blinkState = !blinkState;
         }
+      }
     }
-    else if(h != currentStepPos){
-      pixelsStep.setPixelColor(h, NO_LIGHT);
-    }else if(h == currentStepPos){
-      pixelsStep.setPixelColor(h, GREEN);
+  }
+
+  if(mode == PLAY_MODE && track_mode == CHANGE_TRACK){
+    for(int h=0; h < STEP_NUMBER; h++){
+      byte note = currentTrack->stepNotes[h];
+      if(h != currentPlayStepPos){
+        pixelsStep.setPixelColor(h, getColorForNote(note));
+      }else if(h == currentPlayStepPos){
+        pixelsStep.setPixelColor(h, GREEN);
+      }
     }
   }
   
@@ -373,18 +349,67 @@ void allumerActiveSteps(){
   pixelsTrack.show();
 }
 
+/*********************************************************************
+            ########   #######  ######## 
+            ##     ## ##     ##    ##    
+            ##     ## ##     ##    ##    
+            ########  ##     ##    ##    
+            ##        ##     ##    ##    
+            ##        ##     ##    ##    
+            ##         #######     ##    
+
+ ********************************************************************/
+
 int getPot1(int valNumber = 8){
-  int val = analogRead(POT_ONE);
-  return (float)val/(float)1022 * valNumber;
+  static float sum = 0;
+  static float counter = 0;
+  static float lastVal = 0;
+
+  counter++;
+  sum += analogRead(POT_ONE);
+  if(counter >= SMOOTHING_FACTOR){
+    lastVal = sum/counter/(float)1022;
+    counter = 0;
+    sum = 0;
+    return lastVal * valNumber;
+  }
+  return lastVal * valNumber;
 }
 
-int getPot2(int valueNumber = 8){
-  int val = analogRead(POT_TWO);
-  return (float)val/(float)1022 * valueNumber;
+int getPot2(int valNumber = 8){
+  static float sum = 0;
+  static float counter = 0;
+  static float lastVal = 0;
+
+  counter++;
+  sum += analogRead(POT_TWO);
+  if(counter >= SMOOTHING_FACTOR){
+    lastVal = sum/counter/(float)1022;
+    counter = 0;
+    sum = 0;
+    return lastVal * valNumber;
+  }
+  return lastVal * valNumber;
+}
+
+int getPot3(int valNumber = 8){
+  static float sum = 0;
+  static float counter = 0;
+  static float lastVal = 0;
+
+  counter++;
+  sum += analogRead(POT_THREE);
+  if(counter >= SMOOTHING_FACTOR){
+    lastVal = sum/counter/(float)1022;
+    counter = 0;
+    sum = 0;
+    return lastVal * valNumber;
+  }
+  return lastVal * valNumber;
 }
 
 int getTempo(){
-  return getPot2(120) + 60;
+  return getPot3(120) + 60;
 }
 
 int getDelay(int tempo){
@@ -417,19 +442,15 @@ int play(){
   static int delayVal = 500; // delay for half a second
   static unsigned long previousMillis = 0;
   unsigned long currentMillis = millis();
-  static int _currentStepPos = 0;
-
-  _currentStepPos = currentStepPos;
   int midiFlush = 0;
-  int newTempo = getTempo();
 
-  
+  int newTempo = getTempo();
   if(tempo != newTempo){
     tempo = newTempo;
     controlChange(1, 0, map(tempo, 0, 180, 0, 127));
     midiFlush = 1;
   }
-
+  
   if (currentMillis - previousMillis >= delayVal) {
     previousMillis = currentMillis;
     delayVal = getDelay(tempo);
@@ -437,8 +458,8 @@ int play(){
     for(int i = 0; i < TRACK_NUMBER; i++){
       track mTrack = trackList[i];
       if(!mTrack.mute || mTrack.solo){
-        byte note = mTrack.stepNotes[_currentStepPos];
-        byte prevNote = mTrack.stepNotes[_currentStepPos-1 < 0 ? STEP_NUMBER-1 : _currentStepPos-1];
+        byte note = mTrack.stepNotes[currentPlayStepPos];
+        byte prevNote = mTrack.stepNotes[currentPlayStepPos-1 < 0 ? STEP_NUMBER-1 : currentPlayStepPos-1];
         if(note != NOTE_OFF){
           noteOn(i, note, MIDI_MAX_VALUE);
           midiFlush = 1;
@@ -450,11 +471,8 @@ int play(){
       }
     }
     
-    allumerActiveSteps();
-    pixelsStep.show(); // This sends the updated pixel color to the hardware.
-    _currentStepPos++;
-    if(_currentStepPos == STEP_NUMBER) _currentStepPos = 0;
-    if(track_mode == CHANGE_TRACK) currentStepPos = _currentStepPos;
+    currentPlayStepPos++;
+    if(currentPlayStepPos == STEP_NUMBER) currentPlayStepPos = 0;
    }
 
    return midiFlush;
