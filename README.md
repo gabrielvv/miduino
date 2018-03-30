@@ -35,7 +35,7 @@
 
 ## Montage ##
 
-  ![Miduino montage](./screenShot/.jpg "Miduino montage")
+  ![Miduino montage](./screenShot/fritzing.png "Miduino montage")
 
 
 ## MODE ##
