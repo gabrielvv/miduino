@@ -13,19 +13,31 @@ using namespace ace_button;
 #include <pitchToFrequency.h>
 #include <pitchToNote.h>
 
+/******************************************************************************************************************
+
+     ######   #######  ##    ##  ######  ########       ###    ##    ## ########     ##     ##    ###    ########  
+    ##    ## ##     ## ###   ## ##    ##    ##         ## ##   ###   ## ##     ##    ##     ##   ## ##   ##     ## 
+    ##       ##     ## ####  ## ##          ##        ##   ##  ####  ## ##     ##    ##     ##  ##   ##  ##     ## 
+    ##       ##     ## ## ## ##  ######     ##       ##     ## ## ## ## ##     ##    ##     ## ##     ## ########  
+    ##       ##     ## ##  ####       ##    ##       ######### ##  #### ##     ##     ##   ##  ######### ##   ##   
+    ##    ## ##     ## ##   ### ##    ##    ##       ##     ## ##   ### ##     ##      ## ##   ##     ## ##    ##  
+     ######   #######  ##    ##  ######     ##       ##     ## ##    ## ########        ###    ##     ## ##     ## 
+
+ ******************************************************************************************************************/
+
+#define BLINK_DELAY 200
 #define EDIT_MODE 123
 #define EDIT_TRACK 125
 #define CHANGE_TRACK 126
 #define PLAY_MODE 127
 
 #define NOTE_NUMBER 13
-
 const int STEP_NUMBER = 16;
 const int TRACK_NUMBER = 8;
 
 int currentTrackPos = 0;
 int prevTrackPos = 0;
-int currentPos = 0;
+int currentStepPos = 0;
 int prevStep = 0;
 int tempo=0;
 
@@ -33,7 +45,7 @@ int selectedNoteIndex = 0;
 int prevNote = 0;
 
 int mode = EDIT_MODE;
-int track_mode = EDIT_TRACK;
+int track_mode = CHANGE_TRACK;
 
 /*********************************************
 
@@ -55,6 +67,8 @@ int track_mode = EDIT_TRACK;
 #define PIN_INFRA 5
 #define PIN_ULTRASOUND_OUT 6
 #define PIN_ULTRASOUND_IN 7
+#define PIN_LED 8
+#define PIN_LED_MODE 4
 
 // Analog
 const int POT_ONE = A0;
@@ -255,10 +269,14 @@ void handleEventButton1(AceButton* button, uint8_t eventType, uint8_t buttonStat
             pixelsStep.clear();
             Serial.println("EDIT_MODE => PLAY_MODE");
             mode = PLAY_MODE;
+            digitalWrite(PIN_LED_MODE, HIGH);
+            track_mode = CHANGE_TRACK;
         }
         else if(mode == PLAY_MODE){
             Serial.println("PLAY_MODE => EDIT_MODE");
             mode = EDIT_MODE;
+            digitalWrite(PIN_LED_MODE, LOW);
+            track_mode = CHANGE_TRACK;
             noteOffAll();
         }
       break;
@@ -266,15 +284,15 @@ void handleEventButton1(AceButton* button, uint8_t eventType, uint8_t buttonStat
         /*int solo = trackList[currentTrackPos].solo = !trackList[currentTrackPos].solo;
         controlChange(0, 202+currentTrackPos, solo*MIDI_MAX_VALUE);
         MidiUSB.flush();*/
-        if(mode == EDIT_MODE){
-          if(track_mode == CHANGE_TRACK){
-            Serial.println("CHANGE_TRACK => EDIT_TRACK");
-            track_mode = EDIT_TRACK;
-          }
-          else if(track_mode == EDIT_TRACK){
-             Serial.println("EDIT_TRACK => CHANGE_TRACK");
-             track_mode = CHANGE_TRACK ; 
-          }
+        if(track_mode == CHANGE_TRACK){
+          Serial.println("CHANGE_TRACK => EDIT_TRACK");
+          track_mode = EDIT_TRACK;
+          digitalWrite(PIN_LED, HIGH);
+        }
+        else if(track_mode == EDIT_TRACK){
+           Serial.println("EDIT_TRACK => CHANGE_TRACK");
+           track_mode = CHANGE_TRACK ; 
+           digitalWrite(PIN_LED, LOW);
         }
       break;
   }
@@ -284,12 +302,23 @@ void handleEventButton1(AceButton* button, uint8_t eventType, uint8_t buttonStat
  * MIDI values < 64 pour OFF, et >= 64 pour ON
  * 
  */
-void handleEventButton2(AceButton* button, uint8_t eventType, uint8_t buttonState) {
-    
+void handleEventButton2(AceButton* button, uint8_t eventType, uint8_t buttonState) { 
     switch(eventType) {
-       case AceButton::kEventClicked:
-        int mute = trackList[currentTrackPos].mute = !trackList[currentTrackPos].mute;
-        controlChange(0, 102+currentTrackPos, !mute*MIDI_MAX_VALUE);
+       case AceButton::kEventPressed:
+        if(mode == PLAY_MODE){
+          int mute = trackList[currentTrackPos].mute = !trackList[currentTrackPos].mute;
+          controlChange(0, 102+currentTrackPos, (!mute)*MIDI_MAX_VALUE);
+        }else{
+          byte note = trackList[currentTrackPos].stepNotes[currentStepPos];
+          noteOn(currentTrackPos, note, MIDI_MAX_VALUE);
+        }
+        MidiUSB.flush();
+       break;
+       case AceButton::kEventReleased:
+       if(mode == EDIT_MODE){
+          byte note = trackList[currentTrackPos].stepNotes[currentStepPos];
+          noteOff(currentTrackPos, note, MIDI_MAX_VALUE);
+        }
         MidiUSB.flush();
        break;
     }
@@ -373,16 +402,15 @@ void allumerActiveSteps(){
 
   currentMillis = millis();
   struct track *currentTrack = &(trackList[currentTrackPos]);
+
+  /* STEP LEDS */
   
   for(int h=0; h < STEP_NUMBER; h++){
     byte note = currentTrack->stepNotes[h];
-    if(note != NOTE_OFF && h != currentPos){
+    if(note != NOTE_OFF && h != currentStepPos){
       pixelsStep.setPixelColor(h, getColorForNote(note));
-    }else if(note != NOTE_OFF && h == currentPos){
-      if(mode == PLAY_MODE){
-        pixelsStep.setPixelColor(h, GREEN);
-      }else{
-        if(currentMillis - prevMillis > 200){
+    }else if(note != NOTE_OFF && h == currentStepPos && track_mode == EDIT_TRACK){
+        if(currentMillis - prevMillis > BLINK_DELAY){
           prevMillis = currentMillis;
           if(blinkState){
             pixelsStep.setPixelColor(h, getColorForNote(note));
@@ -391,15 +419,18 @@ void allumerActiveSteps(){
           }
           blinkState = !blinkState;
         }
-      }
     }
-    else if(h != currentPos){
+    else if(h != currentStepPos){
       pixelsStep.setPixelColor(h, NO_LIGHT);
-    }else if(h == currentPos){
+    }else if(h == currentStepPos){
       pixelsStep.setPixelColor(h, GREEN);
     }
   }
+  
   pixelsStep.show();
+
+  /* TRACK LEDS */
+  
   pixelsTrack.setPixelColor(currentTrackPos, GREEN);
   pixelsTrack.show();
 }
@@ -434,6 +465,26 @@ void selecTrack(int trackStep){
   pixelsTrack.show();
 }
 
+/**
+ * Midi clock
+ * @see http://midi.teragonaudio.com/tech/midispec/clock.htm
+ */
+void sendClock(){
+  static int prevMicros = 0;
+  static int currentMicros;
+  int interval = 20833;//getDelay(getTempo())*2*1000 / 24; // microseconds
+
+  //Serial.println(interval, DEC);
+
+  currentMicros = micros();
+
+  if(currentMicros - prevMicros >= interval){
+    prevMicros = currentMicros;
+    //Serial.println("sendClock");
+    MidiUSB.write({(uint8_t)0xF8}, sizeof((uint8_t)0xF8));
+  }
+}
+
 /*************************************
 ########  ##          ###    ##    ## 
 ##     ## ##         ## ##    ##  ##  
@@ -448,9 +499,13 @@ int play(){
   static int delayVal = 500; // delay for half a second
   static unsigned long previousMillis = 0;
   unsigned long currentMillis = millis();
-  int midiFlush = 0;
+  static int _currentStepPos = 0;
 
+  _currentStepPos = currentStepPos;
+  int midiFlush = 0;
   int newTempo = getTempo();
+
+  
   if(tempo != newTempo){
     tempo = newTempo;
     controlChange(1, 0, map(tempo, 0, 180, 0, 127));
@@ -463,22 +518,25 @@ int play(){
     
     for(int i = 0; i < TRACK_NUMBER; i++){
       track mTrack = trackList[i];
-      byte note = mTrack.stepNotes[currentPos];
-      byte prevNote = mTrack.stepNotes[currentPos-1 < 0 ? STEP_NUMBER-1 : currentPos-1];
-      if(note != NOTE_OFF){
-        noteOn(i, note, MIDI_MAX_VALUE);
-        midiFlush = 1;
-      }
-      if(prevNote != NOTE_OFF && note != prevNote){
-        noteOff(i, prevNote, MIDI_MAX_VALUE);
-        midiFlush = 1;
+      if(!mTrack.mute || mTrack.solo){
+        byte note = mTrack.stepNotes[_currentStepPos];
+        byte prevNote = mTrack.stepNotes[_currentStepPos-1 < 0 ? STEP_NUMBER-1 : _currentStepPos-1];
+        if(note != NOTE_OFF){
+          noteOn(i, note, MIDI_MAX_VALUE);
+          midiFlush = 1;
+        }
+        if(prevNote != NOTE_OFF && note != prevNote){
+          noteOff(i, prevNote, MIDI_MAX_VALUE);
+          midiFlush = 1;
+        }
       }
     }
     
     allumerActiveSteps();
     pixelsStep.show(); // This sends the updated pixel color to the hardware.
-    currentPos++;
-    if(currentPos == STEP_NUMBER) currentPos = 0;
+    _currentStepPos++;
+    if(_currentStepPos == STEP_NUMBER) _currentStepPos = 0;
+    if(track_mode == CHANGE_TRACK) currentStepPos = _currentStepPos;
    }
 
    return midiFlush;

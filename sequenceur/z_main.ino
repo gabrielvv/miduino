@@ -11,14 +11,18 @@
 
 void setup() {
 
-  Serial.begin(9600);
-  while (!Serial) {
-   delay(1000); // wait for serial port to connect. Needed for native USB port only
-  }
-  Serial.println("Initialisation...");  
-  Mouse.begin();
-  mouse_init(&mouse);
-  Serial.println("Trackpad setup done");
+  /******************************************/
+  
+//  Serial.begin(9600);
+//  while (!Serial) {
+//   delay(1); // wait for serial port to connect. Needed for native USB port only
+//  }
+//  Serial.println("Initialisation...");  
+//  Mouse.begin();
+//  mouse_init(&mouse);
+//  Serial.println("Trackpad setup done");
+
+  /******************************************/
   
   // initialize the pushbutton pin as an input:
   pinMode(PIN_BUTTON_ONE, INPUT_PULLUP);
@@ -27,6 +31,9 @@ void setup() {
   pinMode(PIN_INFRA, INPUT); 
   pinMode(PIN_ULTRASOUND_OUT, OUTPUT);
   pinMode(PIN_ULTRASOUND_IN, INPUT);
+
+  pinMode(PIN_LED, OUTPUT);
+  pinMode(PIN_LED_MODE, OUTPUT);
 
   // button set eventHandler;
   buttonConfig.setFeature(ButtonConfig::kFeatureClick);
@@ -73,35 +80,57 @@ void loop() {
   static int infraState = LOW;
   static int prevDist = 0;
   static int dist = 0;
-  static int flushMidi = 0;
+  static int midiFlush = 0;
 
-  flushMidi = 0;
+  midiFlush = 0;
 
-  xy coord = mouse_read(&mouse);
-  xyControlChange(coord.x, coord.y);
+//  xy coord = mouse_read(&mouse);
+//  xyControlChange(coord.x, coord.y);
   
   button1.check();
   button2.check();
   
   if(mode == PLAY_MODE){
-    if(play()) flushMidi = 1;
-    currentTrackPos = getPot1(TRACK_NUMBER);
-    if(prevTrackPos != currentTrackPos){
-      selecTrack(currentTrackPos);
-      prevTrackPos = currentTrackPos;
+    //sendClock();
+    if(play()) midiFlush = 1;
+
+    if(track_mode == CHANGE_TRACK){
+      currentTrackPos = getPot1(TRACK_NUMBER);
+      if(prevTrackPos != currentTrackPos){
+        selecTrack(currentTrackPos);
+        prevTrackPos = currentTrackPos;
+      }
+    }
+
+    if(track_mode == EDIT_TRACK){
+      currentStepPos = getPot1(STEP_NUMBER);
+      if(prevStep != currentStepPos){
+        selectStep(currentStepPos);
+        prevStep = currentStepPos;
+      }
+
+      selectedNoteIndex = getPot2(NOTE_NUMBER);
+      if(prevNote != selectedNoteIndex){
+        trackList[currentTrackPos].stepNotes[currentStepPos] = notePitches[selectedNoteIndex];
+        prevNote = selectedNoteIndex;
+      }
     }
   }
+  
   if(mode == EDIT_MODE && track_mode == EDIT_TRACK){
-    currentPos = getPot1(STEP_NUMBER);
-    if(prevStep != currentPos){
-      selectStep(currentPos);
-      prevStep = currentPos;
+    currentStepPos = getPot1(STEP_NUMBER);
+    if(prevStep != currentStepPos){
+      selectStep(currentStepPos);
+      prevStep = currentStepPos;
     }
 
     selectedNoteIndex = getPot2(NOTE_NUMBER);
     if(prevNote != selectedNoteIndex){
-      trackList[currentTrackPos].stepNotes[currentPos] = notePitches[selectedNoteIndex];
+      byte note = notePitches[selectedNoteIndex];
+      trackList[currentTrackPos].stepNotes[currentStepPos] = note;
       prevNote = selectedNoteIndex;
+      /*noteOn(currentTrackPos, note, MIDI_MAX_VALUE);
+      midiFlush = 1;*/
     }
     allumerActiveSteps();
   }
@@ -118,11 +147,11 @@ void loop() {
   if(digitalRead(PIN_INFRA) == HIGH && infraState != HIGH){
     controlChange(1,1,MIDI_MAX_VALUE);
     infraState = HIGH;
-    flushMidi = 1;
+    midiFlush = 1;
   }else if(digitalRead(PIN_INFRA) == LOW && infraState != LOW){
     controlChange(1,1,0);
     infraState = LOW;
-    flushMidi = 1;
+    midiFlush = 1;
   }
   
   /*dist = getDist();
@@ -130,10 +159,10 @@ void loop() {
     //Serial.println("New distance :" + String(dist, DEC));
     prevDist = dist;
     controlChange(1,2,map(dist, 2, 30, 0, MIDI_MAX_VALUE));
-    flushMidi = 1;
+    midiFlush = 1;
   }*/
   
-  if(flushMidi){
+  if(midiFlush){
     MidiUSB.flush();
   }
 }
