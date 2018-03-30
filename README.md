@@ -1,7 +1,7 @@
 # MIDUINO SEQUENCEUR
 
 
-![Miduino montage](./screenShot/montage.jpg "Miduino montage")
+![Miduino montage](./screenshot/montage.jpg "Miduino montage")
 
 ### Bibliothèques
 
@@ -19,7 +19,7 @@
   * https://create.arduino.cc/projecthub/BuildItDR/arduino-controlled-usb-trackpad-f443a6
   * https://playground.arduino.cc/ComponentLib/Ps2mouse
 
-  
+
 
 ### TODO
 
@@ -37,14 +37,14 @@
 
 ## Montage ##
 
-  ![Miduino montage](./screenShot/fritzing.png "Miduino montage")
+  ![Miduino montage](./screenshot/fritzing.png "Miduino montage")
 
 
 ## MODE ##
 
   Le système est composé de deux modes (**PLAY** et **EDIT**) ainsi que de deux sous modes (**CHANGE_TRACK** et **EDIT_TRACK**)
 
-  ![Miduino montage](./screenShot/diagramme.png "Miduino montage")
+  ![Miduino montage](./screenshot/diagramme.png "Miduino montage")
 
 
   **PLAY**: Permet de jouer toutes les tracks </br>
