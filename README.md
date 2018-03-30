@@ -13,8 +13,8 @@
 
 * [RGB 8xLed Strip](https://www.amazon.com/Strip-CJMCU-WS2812-Driver-Development/dp/B071G8WQ8T)
 * [Trimpot 10K with Knob](https://www.sparkfun.com/products/9806)
-* [UltraSound Range Finder DPY-ME007](http://forum.arduino.cc/index.php?topic=63302.0)
-* [Capteur Infrarouge réglable MC005](https://www.gotronic.fr/art-capteur-infrarouge-reglable-mc005-12405.htm)
+* [UltraSound Range Finder DPY-ME007](http://forum.arduino.cc/index.php?topic=63302.0) (cf => feature/ultrasound_trackpad)
+* [Capteur Infrarouge réglable MC005](https://www.gotronic.fr/art-capteur-infrarouge-reglable-mc005-12405.htm) (cf => feature/ultrasound_trackpad)
 * Trackpad
   * https://create.arduino.cc/projecthub/BuildItDR/arduino-controlled-usb-trackpad-f443a6
   * https://playground.arduino.cc/ComponentLib/Ps2mouse
@@ -50,5 +50,3 @@
   **CHANGE_TRACK**: Permet de sélectionner une track </br>
   **EDIT_TRACK** PErmet d'étiter une track </br>
 
-
-  Le système inclut aussi deux potentiomètres qui permettent de se déplacer au niveau des track ou des temps ainsi que de choisir la note à jouer en fonction du mode sélectioné.
