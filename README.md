@@ -45,8 +45,3 @@
   ![Miduino montage](./screenShot/diagramme.png "Miduino montage")
 
 
-  **PLAY**: Permet de jouer toutes les tracks </br>
-  **EDIT**: Permet l'édition d'une track </br>
-  **CHANGE_TRACK**: Permet de sélectionner une track </br>
-  **EDIT_TRACK** PErmet d'étiter une track </br>
-
