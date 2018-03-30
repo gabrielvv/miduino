@@ -47,11 +47,4 @@
   ![Miduino montage](./screenshot/diagramme.png "Miduino montage")
 
 
-  **PLAY**: Permet de jouer toutes les tracks </br>
-  **EDIT**: Permet l'édition d'une track </br>
-  **CHANGE_TRACK**: Permet de sélectionner une track </br>
-  **EDIT_TRACK** Permet d'éditer une track </br>
-
-
-  Le système inclut aussi deux potentiomètres qui permettent de se déplacer au niveau des track ou des temps ainsi que de choisir la note à jouer en fonction du mode sélectioné.
 
