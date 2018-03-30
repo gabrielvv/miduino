@@ -1,6 +1,9 @@
 # MIDUINO SEQUENCEUR
 
-### Libraries
+
+![Miduino montage](./screenShot/montage.jpg "Miduino montage")
+
+### Bibliothèques
 
 * [AceButton](https://github.com/bxparks/AceButton)
 * [NeoPixel](https://github.com/adafruit/Adafruit_NeoPixel)
@@ -19,3 +22,34 @@
 ### TODO
 
 * Midi Clock
+
+
+## Fonctionalités ##
+
+  - Configuration de séquence musical sur deux mesures (binaire)
+  - Choix des notes pour chaque temps
+  - Gestion du multiTrack (8 channel disponible)
+  - Gestion du bouton Play/Pause (capteur d'obstacle)
+  - Gestion de filtre audio (capteur de distance)
+  - Envoi de signaux MIDI par USB  
+
+## Montage ##
+
+  ![Miduino montage](./screenShot/fritzing.png "Miduino montage")
+
+
+## MODE ##
+
+  Le système est composé de deux modes (**PLAY** et **EDIT**) ainsi que de deux sous modes (**CHANGE_TRACK** et **EDIT_TRACK**)
+
+  ![Miduino montage](./screenShot/diagramme.png "Miduino montage")
+
+
+  **PLAY**: Permet de jouer toutes les tracks </br>
+  **EDIT**: Permet l'édition d'une track </br>
+  **CHANGE_TRACK**: Permet de sélectionner une track </br>
+  **EDIT_TRACK** PErmet d'étiter une track </br>
+
+
+  Le système inclut aussi deux potentiomètres qui permettent de se déplacer au niveau des track ou des temps ainsi que de choisir la note à jouer en fonction du mode sélectioné.
+
