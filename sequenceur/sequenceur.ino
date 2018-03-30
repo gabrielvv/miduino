@@ -1,8 +1,5 @@
 #include <Adafruit_NeoPixel.h>
 
-#include <Mouse.h>
-#include <ps2.h>
-
 #include <AceButton.h>
 using namespace ace_button;
 #include <AdjustableButtonConfig.h>
@@ -64,10 +61,7 @@ int track_mode = CHANGE_TRACK;
 #define PIN_BUTTON_ONE 3
 #define PIN_BUTTON_TWO 2
 #define PIN_BUTTON_THREE 4
-#define PIN_INFRA 5
-#define PIN_ULTRASOUND_OUT 6
-#define PIN_ULTRASOUND_IN 7
-#define PIN_LED 8
+#define PIN_LED_SUBMODE 8
 #define PIN_LED_MODE 4
 
 // Analog
@@ -271,28 +265,32 @@ void handleEventButton1(AceButton* button, uint8_t eventType, uint8_t buttonStat
             mode = PLAY_MODE;
             digitalWrite(PIN_LED_MODE, HIGH);
             track_mode = CHANGE_TRACK;
+            digitalWrite(PIN_LED_SUBMODE, LOW);
         }
         else if(mode == PLAY_MODE){
             Serial.println("PLAY_MODE => EDIT_MODE");
             mode = EDIT_MODE;
             digitalWrite(PIN_LED_MODE, LOW);
             track_mode = CHANGE_TRACK;
+            digitalWrite(PIN_LED_SUBMODE, LOW);
             noteOffAll();
         }
       break;
       case AceButton::kEventClicked:
-        /*int solo = trackList[currentTrackPos].solo = !trackList[currentTrackPos].solo;
+        int solo = trackList[currentTrackPos].solo = !trackList[currentTrackPos].solo;
         controlChange(0, 202+currentTrackPos, solo*MIDI_MAX_VALUE);
-        MidiUSB.flush();*/
+        MidiUSB.flush();
+        
         if(track_mode == CHANGE_TRACK){
           Serial.println("CHANGE_TRACK => EDIT_TRACK");
           track_mode = EDIT_TRACK;
-          digitalWrite(PIN_LED, HIGH);
+          digitalWrite(PIN_LED_SUBMODE, HIGH);
         }
+        
         else if(track_mode == EDIT_TRACK){
            Serial.println("EDIT_TRACK => CHANGE_TRACK");
            track_mode = CHANGE_TRACK ; 
-           digitalWrite(PIN_LED, LOW);
+           digitalWrite(PIN_LED_SUBMODE, LOW);
         }
       break;
   }
@@ -323,66 +321,6 @@ void handleEventButton2(AceButton* button, uint8_t eventType, uint8_t buttonStat
        break;
     }
 }
-
-/****************************************************************************
-
-##     ## ##       ######## ########     ###        ######   #######  ##     ## ##    ## ########  
-##     ## ##          ##    ##     ##   ## ##      ##    ## ##     ## ##     ## ###   ## ##     ## 
-##     ## ##          ##    ##     ##  ##   ##     ##       ##     ## ##     ## ####  ## ##     ## 
-##     ## ##          ##    ########  ##     ##     ######  ##     ## ##     ## ## ## ## ##     ## 
-##     ## ##          ##    ##   ##   #########          ## ##     ## ##     ## ##  #### ##     ## 
-##     ## ##          ##    ##    ##  ##     ##    ##    ## ##     ## ##     ## ##   ### ##     ## 
- #######  ########    ##    ##     ## ##     ##     ######   #######   #######  ##    ## ########  
- 
- *******************************************************************************/
-
-/**
- *
- *
- * @return {int} distance - distance en cm (oscille typiquement entre 2 et 30), 0 quand champ libre
- */
-int getDist(){
-
-  static int getDist_distance = 0;
-  static int getDist_prevDistance = 0;
-  static int getDist_currentStep = 0; 
-  static unsigned long getDist_previousInfraMillis = 0;
-  static unsigned long getDist_currentInfraMillis = 0;
-
-  getDist_currentInfraMillis = millis();
-  
-  if(getDist_currentStep == 0){
-    //Serial.println("getDist : step1");
-    digitalWrite(PIN_ULTRASOUND_OUT, LOW);
-    getDist_currentStep = 1;
-    getDist_previousInfraMillis = millis();
-  }
-  
-  // The DYP-ME007 pings on the low-high flank...
-  if (getDist_currentInfraMillis - getDist_previousInfraMillis >= 100 && getDist_currentStep == 1) {
-    //Serial.println("getDist : step2");
-    getDist_currentStep = 2;
-    digitalWrite(PIN_ULTRASOUND_OUT, HIGH);
-    getDist_previousInfraMillis = millis();
-  }
-  
-  if (getDist_currentInfraMillis - getDist_previousInfraMillis >= 200 && getDist_currentStep == 2) {
-    //Serial.println("getDist : step3");
-    getDist_previousInfraMillis = 1;
-    getDist_currentStep = 0;
-    digitalWrite(PIN_ULTRASOUND_OUT, LOW);
-    
-    // the distance is proportional to the time interval
-    // between HIGH and LOW
-    // @see http://arcbotics.com/products/sparki/parts/ultrasonic-range-finder/
-    getDist_distance = pulseIn(PIN_ULTRASOUND_IN, HIGH) / 58;
-    if(getDist_prevDistance != getDist_distance){
-      getDist_prevDistance = getDist_distance;
-    }
-  }   
-  return getDist_distance;                        
-}
-
 
 /*************************************************************
    ###    ##       ##       ##     ## ##     ## ######## ########  
@@ -463,26 +401,6 @@ void selecTrack(int trackStep){
   pixelsTrack.clear();
   pixelsTrack.setPixelColor(trackStep, GREEN);
   pixelsTrack.show();
-}
-
-/**
- * Midi clock
- * @see http://midi.teragonaudio.com/tech/midispec/clock.htm
- */
-void sendClock(){
-  static int prevMicros = 0;
-  static int currentMicros;
-  int interval = 20833;//getDelay(getTempo())*2*1000 / 24; // microseconds
-
-  //Serial.println(interval, DEC);
-
-  currentMicros = micros();
-
-  if(currentMicros - prevMicros >= interval){
-    prevMicros = currentMicros;
-    //Serial.println("sendClock");
-    MidiUSB.write({(uint8_t)0xF8}, sizeof((uint8_t)0xF8));
-  }
 }
 
 /*************************************
